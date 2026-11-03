@@ -85,7 +85,7 @@ def main() -> int:
     plain.deploy()
     pod = applied_manifest(calls())[0]["spec"]["template"]["spec"]
     assert "nodeSelector" not in pod and "imagePullSecrets" not in pod
-    assert pod["containers"][0]["image"] == "ghcr.io/distributed-experiment-toolbox/telek6:0.3.0", "prepared runs need telek6 >= 0.3.0"
+    assert pod["containers"][0]["image"] == "ghcr.io/distributed-experiment-toolbox/telek6:0.3.1", "prepared runs need telek6 >= 0.3.0"
     assert pod["volumes"][0]["emptyDir"]["sizeLimit"], "the long-lived pod's run data is bounded"
     n_delete = calls().count("delete")
     plain.onTeardown()

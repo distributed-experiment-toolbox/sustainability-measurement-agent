@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: telek6
-        image: ghcr.io/distributed-experiment-toolbox/telek6:0.3.0
+        image: ghcr.io/distributed-experiment-toolbox/telek6:0.3.1
         ports:
         - containerPort: 5124
           name: http
