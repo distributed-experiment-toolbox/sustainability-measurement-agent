@@ -84,7 +84,9 @@ def main() -> int:
     plain = Telek6SmaModule({"url": URL, "deploy": True})
     plain.deploy()
     pod = applied_manifest(calls())[0]["spec"]["template"]["spec"]
-    assert "nodeSelector" not in pod and "imagePullSecrets" not in pod and pod["containers"][0]["image"].startswith("ghcr.io/tawalaya/telek6:")
+    assert "nodeSelector" not in pod and "imagePullSecrets" not in pod
+    assert pod["containers"][0]["image"] == "ghcr.io/distributed-experiment-toolbox/telek6:0.3.0", "prepared runs need telek6 >= 0.3.0"
+    assert pod["volumes"][0]["emptyDir"]["sizeLimit"], "the long-lived pod's run data is bounded"
     n_delete = calls().count("delete")
     plain.onTeardown()
     assert calls().count("delete") == n_delete, "undeploy: false must keep the pod"
@@ -120,7 +122,7 @@ def main() -> int:
         meta = mod.trigger(threading.Event(), script_path=script, files={"plan.ndjson": plan},
                            env={"PLAN_PATH": "plan.ndjson"}, download_dir=out)
         assert meta["k6_status"] == "complete" and meta["exit_code"] == 0, meta
-        assert "console.ndjson" in meta["files"] and meta["run_dir"] == out, meta
+        assert "console.ndjson" in meta["downloaded_files"] and meta["run_dir"] == out, meta
         recs = [l for l in open(os.path.join(out, "console.ndjson")) if l.startswith("{")]
         assert len(recs) == 3 and '"plan":"p1"' in recs[0], recs
         print("ok  trigger runs a script with a file and env, downloads into download_dir")
@@ -138,6 +140,45 @@ def main() -> int:
         mod.onReport(R())
         assert os.path.isdir(os.path.join(R.location, "telek6")) and not os.path.exists(meta["run_dir"])
         print("ok  onReport moves a temp download under the report")
+
+        # prepared runs against the real server, driven through the module's own hooks
+        open(script, "w").write(SCRIPT)
+        for start_at in ("treatment", "left_window"):
+            pm = Telek6SmaModule({"url": f"http://127.0.0.1:{port}", "timeout_s": 30, "start_at": start_at})
+            pm.onSetup()   # healthy, then reset
+            out = os.path.join(work, f"prepared-{start_at}")
+            kw = dict(script_path=script, files={"plan.ndjson": plan}, env={"PLAN_PATH": "plan.ndjson"}, download_dir=out)
+            pm.onRunParameters(**kw)
+            pm.onRunStart()
+            token = pm._run.token
+            assert pm.client.status(token)["ready"], "onRunStart returns once every VU is initialised"
+            pm.onLeftWindowStart()
+            assert (pm.client.status(token)["resumed_at"] is not None) == (start_at == "left_window")
+            meta = pm.trigger(threading.Event(), **kw)
+            assert meta["token"] == token and meta["k6_status"] == "complete" and meta["start_at"] == start_at, meta
+            assert meta["resumed_at"] >= meta["started_at"] and meta["prepare_s"] > 0, meta
+            assert len([l for l in open(os.path.join(out, "console.ndjson")) if l.startswith("{")]) == 3
+            pm.onRunEnd()
+            assert pm.client.status(token)["status"] == "finished"
+            print(f"ok  start_at: {start_at}: prepared until ready, resumed, waited on, downloaded")
+
+        pm = Telek6SmaModule({"url": f"http://127.0.0.1:{port}", "timeout_s": 30, "start_at": "treatment"})
+        pm.onSetup()
+        pm.onRunParameters(script_path=script, files={"plan.ndjson": plan}, env={"PLAN_PATH": "plan.ndjson"})
+        pm.onRunStart()
+        token = pm._run.token
+        pm.onRunEnd()   # the run never reached its trigger: the paused k6 must not survive it
+        assert pm.client.status(token)["status"] == "finished", pm.client.status(token)
+        print("ok  onRunEnd stops a prepared k6 run the trigger never used")
+
+        bad = os.path.join(work, "bad.js")
+        open(bad, "w").write("export const options = { vus: 5, iterations: 1 };\nexport default function () {}\n")
+        pm.onRunParameters(script_path=bad)
+        try:
+            pm.onRunStart(); raise AssertionError("a script k6 refuses must fail the prepare")
+        except RuntimeError as exc:
+            assert "ended before it was ready" in str(exc), exc
+        print("ok  a k6 run that exits during its start-up fails the prepare")
         print("PASS")
         return 0
     finally:

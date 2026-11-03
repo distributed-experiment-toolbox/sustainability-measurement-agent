@@ -48,6 +48,13 @@ class SMAObserver(Protocol):
     def onSessionStart(self) -> None:
         pass
 
+    def onRunParameters(self, **kwargs) -> None:
+        """Called right before onRunStart with the keyword arguments of this run,
+        exactly as the trigger will receive them. Not fatal. An observer that
+        needs per-run input before the treatment (e.g. to prepare a load
+        generator in onRunStart) keeps a copy; every run overwrites it."""
+        pass
+
     def onRunStart(self) -> None:
         pass
 

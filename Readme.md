@@ -81,6 +81,7 @@ SMA follows a simple lifecycle:
 Fully driven by configuration files, SMA connects to external services (e.g., Prometheus), deploys measurement tools (e.g., Kepler), and once instrcuted via the API (`run()`), starts the observation according to the configured mode (trigger, timer, continuous). Finally, SMA collects the measurement data, generates reports, and tears down any deployed infrastructure (if configured to do so).
 
 SMA exposes an observer API (`SMAObserver`), which allows to hook into the lifecycle events (see the diagram) to extend SMA's functionality programmatically, or to integrate into experiment frameworks.
+Observers are notified in registration order: those passed to the constructor first, then config-loaded modules. Only an exception in `onRunStart` aborts a run; every other hook's exceptions are logged. Right before `onRunStart`, `onRunParameters(**kwargs)` hands observers the keyword arguments of `run()`, exactly as the trigger receives them. An observer that needs per-run input before the treatment keeps a copy (the telek6 module uses it to prepare k6 ahead of the treatment, see `modules/telek6/main.py`).
 
 *Modules* can optionally be used to add functionality, such as installing monitoring infrascture, preparing deployments, running workloads, and enhancing reports.
 

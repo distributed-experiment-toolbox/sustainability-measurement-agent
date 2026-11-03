@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: telek6
-        image: ghcr.io/tawalaya/telek6:0.1.0
+        image: ghcr.io/distributed-experiment-toolbox/telek6:0.3.0
         ports:
         - containerPort: 5124
           name: http
@@ -28,7 +28,11 @@ spec:
           mountPath: /data
       volumes:
       - name: data
-        emptyDir: {}
+        # the pod lives across sessions and keeps every run directory; past this
+        # the pod is evicted rather than filling the node. Raise it in your own
+        # manifest (deploy: <path>) for long per-request logs.
+        emptyDir:
+          sizeLimit: 10Gi
       # allow to schedule on control-plane nodes for kind clusters; in real clusters
       # set nodeSelector in the module config
       tolerations:

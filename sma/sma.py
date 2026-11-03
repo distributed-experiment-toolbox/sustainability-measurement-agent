@@ -117,7 +117,11 @@ class SustainabilityMeasurementAgent(object):
         self.logger.debug("Setting up logger with session {session}")
         self.session = session
 
-    def notify_observers(self, event: str, **kwargs) -> None:
+    def notify_observers(self, event: str, /, **kwargs) -> None:
+        """Call `event` on every observer, in registration order: observers passed
+        to the constructor first, then config-loaded modules, then observers added
+        with register_sma_observer. `event` is positional-only, so a run argument
+        named "event" reaches onRunParameters instead of colliding with it."""
         self.logger.info(f"Notifying observers of event: {event}")
         if not hasattr(SMAObserver, event):
             self.logger.warning(f"Observer protocol does not define event {event}")
@@ -268,6 +272,7 @@ class SustainabilityMeasurementAgent(object):
 
         start_time = datetime.datetime.now()
         run_hash = make_run_hash(start_time)
+        self.notify_observers("onRunParameters", **kwargs)
         self.notify_observers("onRunStart")
 
 
